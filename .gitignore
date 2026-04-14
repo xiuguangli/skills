@@ -1,0 +1,36 @@
+# Local workspace metadata
+.codex
+.codex/
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Build and packaging artifacts
+build/
+dist/
+pip-wheel-metadata/
+*.egg-info/
+
+# Skill runtime outputs and temporary caches
+output/
+cache/
+.cache/
+tmp/
+temp/
+research_papers_cache/
+*.log

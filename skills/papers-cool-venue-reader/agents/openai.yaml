@@ -1,0 +1,4 @@
+interface:
+  display_name: "Papers.cool Venue Reader"
+  short_description: "Find venue papers and verify links"
+  default_prompt: "Use python skills/papers-cool-venue-reader/scripts/papers_cool.py from the repo root, or python scripts/papers_cool.py from the skill directory, to find conference papers and verify links."
