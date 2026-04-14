@@ -56,11 +56,14 @@ python skills/papers-cool-venue-reader/scripts/papers_cool.py venue CVPR --year 
 - 或者提供仓库链接 `https://github.com/xiuguangli/skills`，并明确要安装的路径，例如 `skills/research-papers`
 - 安装 `research-papers` 时，应同时安装 `skills/papers-cool-venue-reader`
 
-自然语言示例：
+当前仓库中的 skill 可按下面的方式安装：
 
-- “从这个 GitHub 链接安装 skill：`https://github.com/xiuguangli/skills/tree/main/skills/papers-cool-venue-reader`”
-- “从 `xiuguangli/skills` 安装 `skills/research-papers` 和 `skills/papers-cool-venue-reader`”
-- “列出 `xiuguangli/skills` 的 `skills/` 目录下有哪些 skill，然后安装 `research-papers`”
+| Skill 名称 | 说明 | 安装方式 |
+| --- | --- | --- |
+| `papers-cool-venue-reader` | 从 `papers.cool` 拉取会场论文、核验官方链接或 PDF，并生成结构化摘要。 | “从这个 GitHub 链接安装 skill：`https://github.com/xiuguangli/skills/tree/main/skills/papers-cool-venue-reader`” |
+| `research-papers` | 围绕研究主题先扫六大会，再补 arXiv，生成中文论文综述；依赖 `papers-cool-venue-reader`。 | “从这个 GitHub 链接安装 skill：`https://github.com/xiuguangli/skills/tree/main/skills/research-papers`” |
+
+如果安装 `research-papers`，仍应同时安装 `papers-cool-venue-reader`。
 
 ## 快速开始
 
