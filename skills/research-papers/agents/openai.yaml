@@ -1,4 +1,4 @@
 interface:
   display_name: "Research Papers"
-  short_description: "先全量扫六大会再补 arXiv、每 topic 保留 50 篇的深度综述"
-  default_prompt: "Use $research-papers 围绕我的研究主题生成中文论文综述：先根据用户输入在运行时分析出 aliases、subtopics、keywords，再用这些参数全量检索六大会 venue 并补 arXiv；每个 topic 至少保留 50 篇论文并保证候选池过百，先写 topic 解读，再逐篇解读、给图和例子，最后输出整体理解与重要点。"
+  short_description: "自动拆 topic，先扫六大会再补 arXiv，默认总量 >=200 的中文综述"
+  default_prompt: "Use $research-papers 围绕我的研究主题生成中文论文综述：先把输入拆成 aliases、subtopics、keywords，先全量扫六大会再补 arXiv；以全局不少于 200 篇为主契约、按 topic 组织正文并给出 topic-wise 代表论文时间线。每篇论文至少给出 paper_url / access_url、可用时的 pdf_url、证据等级与说明、中文内容解读、你的理解、直观例子，并在证据允许时补图。若信息有限必须明确标注，不要把论文堆成列表，也不要默认核心深读、其余浅写。"
