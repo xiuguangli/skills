@@ -65,6 +65,76 @@ python skills/papers-cool-venue-reader/scripts/papers_cool.py venue CVPR --year 
 
 如果安装 `research-papers`，仍应同时安装 `papers-cool-venue-reader`。
 
+## 更新 Skills
+
+更新方式取决于你最初是**怎么安装**的，但先把原理说清楚：
+
+### 更新原理
+
+如果你是通过 GitHub 路径把 skill 安装到 `~/.codex/skills/`，安装器做的事情本质上是：
+
+1. 取到远端仓库里某个 skill 目录的内容
+2. 复制到本地 `~/.codex/skills/<skill-name>/`
+
+因此，很多安装器更接近“**复制一份新目录**”，而不是“**在旧目录上做原地升级**”。
+
+这也是为什么更新时最稳妥的思路通常是：
+
+- **先删除旧的 skill 目录**
+- **再重新安装最新的一份**
+
+可以把它理解成：**不是给旧 skill 打补丁，而是用新的目录把旧的替换掉**。
+
+默认安装目录通常是：
+
+```text
+~/.codex/skills/<skill-name>
+```
+
+### 方式 A：你是直接 clone 这个仓库来用
+
+这种情况不需要“删掉再装”，因为你本地用的就是这个仓库本身。
+
+更新方式就是直接更新仓库：
+
+```bash
+git pull
+```
+
+如果依赖文件有变化，再补一次依赖安装：
+
+```bash
+python -m pip install -r skills/papers-cool-venue-reader/requirements.txt
+python -m pip install -r skills/papers-cool-venue-reader/requirements-pdf.txt  # 只有需要 PDF 提取时才装
+```
+
+### 方式 B：你是通过 GitHub 链接安装到 `~/.codex/skills/`
+
+这种情况最稳妥的更新方式就是：
+
+- 删除旧目录
+- 重新从 GitHub 安装最新版本
+- 必要时重启 Codex
+
+下面用**自然语言实例**表示更新意图：
+
+| 你想做什么 | 可以这样说 |
+| --- | --- |
+| 更新 `papers-cool-venue-reader` | “把我本地已经安装的 `papers-cool-venue-reader` 删掉，然后从这个 GitHub 链接重新安装最新版本：`https://github.com/xiuguangli/skills/tree/main/skills/papers-cool-venue-reader`。” |
+| 更新 `research-papers` | “把我本地已经安装的 `research-papers` 删掉，然后从这个 GitHub 链接重新安装最新版本：`https://github.com/xiuguangli/skills/tree/main/skills/research-papers`。” |
+| 同时更新 `research-papers` 和它依赖的 sibling skill | “把我本地的 `research-papers` 和 `papers-cool-venue-reader` 一起删掉，再从各自的 GitHub 路径重新安装最新版本。” |
+| 不确定自己装的是不是最新 | “检查我本地安装的这两个 skill 是否还是旧版本；如果是，就删除旧目录并重新安装最新版本。” |
+
+### 方式 C：你改过本地已安装 skill
+
+如果你在 `~/.codex/skills/` 里手工改过内容，更新前建议先备份或做 diff，避免直接删目录后把自己的改动丢掉。
+
+### 对这个仓库里的两个 skill 的建议
+
+- 更新 `research-papers` 时，**最好同时更新** `papers-cool-venue-reader`
+- 因为 `research-papers` 会直接复用 sibling 路径里的脚本和字段约定
+- 如果只更新一个、不更新另一个，最容易出现脚本字段不一致或行为漂移
+
 ## 快速开始
 
 ### 1. 先验证 `papers-cool-venue-reader`
