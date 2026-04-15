@@ -1,0 +1,143 @@
+{
+  "schema_version": "2.0",
+  "main_topic": "具身空间智能",
+  "parsed_subtopics": [
+    "具身多模态地图学习"
+  ],
+  "keywords": [
+    "embodied spatial intelligence",
+    "multimodal mapping"
+  ],
+  "search_scope": {
+    "venues": [
+      "CVPR",
+      "ICCV",
+      "ECCV",
+      "ICML",
+      "ICLR",
+      "NeurIPS"
+    ],
+    "venue_years": [
+      2026,
+      2025,
+      2024,
+      2023
+    ],
+    "arxiv_date_from": "2023-01-01",
+    "arxiv_limit": 200,
+    "max_workers": 8
+  },
+  "selection_contract": {
+    "min_total_papers": 200,
+    "per_topic_floor": null,
+    "allocation_strategy": "derived_topic_floor",
+    "rebalance_strategy": "density_then_diversity"
+  },
+  "selection_status": "ok",
+  "requirement_failures": [],
+  "totals": {
+    "candidate_pool_size": 284,
+    "curated_papers": 200,
+    "topic_count": 1
+  },
+  "subtopics": [
+    {
+      "name": "具身多模态地图学习",
+      "topic_overview": "该 topic 聚焦把视觉、语言与空间表征统一到具身代理的地图建模流程中。",
+      "intro": "先看地图如何作为任务接口，再看多模态监督如何改善导航与操作。",
+      "summary": "这一主线的关键在于地图不只是记忆，还承担规划和 grounding 的接口角色。",
+      "allocation": {
+        "target": 200,
+        "selected": 200,
+        "rebalance_delta": 0
+      },
+      "search_stats": {
+        "venue": {
+          "records_scanned": 120,
+          "matches": 46
+        },
+        "arxiv": {
+          "matches": 238
+        },
+        "candidate_pool_size": 284
+      },
+      "papers": [
+        {
+          "paper_id": "mapfusion-2025",
+          "title": "MapFusion for Embodied Spatial Intelligence",
+          "authors": "Ada Li; Bo Chen",
+          "published": "CVPR 2025",
+          "paper_url": "https://example.com/mapfusion-paper",
+          "access_url": "https://example.com/mapfusion-landing",
+          "pdf_url": "https://example.com/mapfusion.pdf",
+          "source": "venue",
+          "evidence_status": "full_text_verified",
+          "evidence_note": "已阅读 PDF 正文与附录中的实验段落。",
+          "analysis": "论文提出统一的多模态地图表征，把稠密视觉特征与语言节点放进同一图中，并用检索式规划器完成导航与操作。",
+          "table_summary": "统一多模态地图 + 检索式规划",
+          "insight": "它的真正贡献不是再造一个地图，而是把地图升级成任务推理接口。",
+          "example": "机器人先在厨房里建立语义地图，再根据“拿到红色杯子”的语言约束检索可达路径。",
+          "diagram": "flowchart LR\n  Image[视觉观察] --> Map[多模态地图]\n  Text[语言约束] --> Map\n  Map --> Planner[检索式规划器]"
+        },
+        {
+          "paper_id": "mapprior-2024",
+          "title": "MapPrior with Weak Spatial Supervision",
+          "authors": "Cora Sun",
+          "published": "arXiv 2024",
+          "paper_url": "https://example.com/mapprior-paper",
+          "access_url": "https://arxiv.org/abs/2401.00001",
+          "pdf_url": "",
+          "source": "arxiv",
+          "evidence_status": "abstract_only",
+          "evidence_note": "仅获得摘要与项目页摘要摘录。",
+          "analysis": "该工作强调用弱监督先验稳定地图更新，使 agent 在低标注场景中仍能维持可解释的空间记忆。",
+          "table_summary": "弱监督地图更新",
+          "insight": "如果后续要扩展到更长程任务，这类弱监督先验可能是成本最低的稳定器。",
+          "example": "在没有精确 3D 标注的房间里，代理只用语言提示也能逐步修正地图。",
+          "diagram": ""
+        }
+      ]
+    }
+  ],
+  "ending": {
+    "synthesis": "当前这条线已经从“地图存储信息”演化到“地图承载任务接口与规划记忆”的阶段。",
+    "important_papers": [
+      {
+        "paper_ref": "mapfusion-2025",
+        "why_representative": "它把地图、语言和规划器真正连成了闭环。"
+      }
+    ],
+    "topic_timelines": [
+      {
+        "topic_name": "具身多模态地图学习",
+        "representative_papers": [
+          {
+            "paper_ref": "mapfusion-2025",
+            "published": "CVPR 2025",
+            "title": "MapFusion for Embodied Spatial Intelligence",
+            "why_representative": "首次把多模态地图显式作为规划接口。",
+            "relation_label": "opens"
+          }
+        ]
+      }
+    ],
+    "reading_recommendations": [
+      "先读 MapFusion，再对照弱监督 MapPrior 看地图表征与训练信号如何解耦。"
+    ]
+  },
+  "overall_summary": {
+    "overview": "地图已经从内部状态升级成具身系统对外暴露的 reasoning substrate。",
+    "trends": [
+      "地图结构正在从几何记忆转向多模态任务接口"
+    ],
+    "gaps": [
+      "长期在线更新的稳定性还不够"
+    ],
+    "important_points": [
+      "地图接口化之后，规划器和检索器成为真正的性能瓶颈"
+    ],
+    "reading_path": [
+      "先看代表工作如何把地图接入规划器，再比较弱监督变体。"
+    ]
+  }
+}
