@@ -1,0 +1,47 @@
+{
+  "main_topic": "点云基准评测",
+  "parsed_subtopics": [
+    "基准构建"
+  ],
+  "search_scope": {
+    "venues": [
+      "CVPR",
+      "ICCV"
+    ],
+    "venue_years": [
+      2025,
+      2024
+    ],
+    "arxiv_date_from": "2024-01-01",
+    "arxiv_limit": 50,
+    "papers_per_topic": 50,
+    "min_candidates_per_topic": 100,
+    "max_workers": 4
+  },
+  "subtopics": [
+    {
+      "name": "基准构建",
+      "topic_overview": "这一方向关注如何把复杂的点云任务整理成可复现的 benchmark。",
+      "intro": "先理解 benchmark 想回答什么问题，再看它如何组织数据、指标和 baseline。",
+      "summary": "PointBench 类工作最重要的是把原本分散的问题定义收束成统一评测接口。",
+      "venue_papers": [
+        {
+          "title": "PointBench: A Unified Benchmark for 3D Understanding",
+          "authors": "Dora Lin; Evan Yu",
+          "venue": "CVPR.2025",
+          "year": "2025",
+          "url": "https://example.com/pointbench",
+          "abstract_summary": "论文整合多个点云任务与指标，提供统一 benchmark 和 baseline。",
+          "advisor_note": "它的价值在于统一接口，而不仅是再加一个数据集。",
+          "diagram": "graph TD\n  Tasks[多种点云任务] --> Benchmark[统一 Benchmark]\n  Benchmark --> Metrics[统一指标]"
+        }
+      ]
+    }
+  ],
+  "overall_summary": {
+    "overview": "这类工作证明 benchmark 本身就是研究基础设施。",
+    "reading_path": [
+      "先看 PointBench 的任务定义，再看它如何约束 baseline 对比。"
+    ]
+  }
+}
