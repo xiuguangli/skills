@@ -18,15 +18,20 @@ from typing import Any
 DEFAULT_VENUES = ["CVPR", "ICCV", "ECCV", "ICML", "ICLR", "NeurIPS"]
 DEFAULT_VENUE_SCAN_LIMIT = 5000
 DEFAULT_ARXIV_LIMIT = 200
+DEFAULT_MIN_TOTAL_PAPERS = 200
 DEFAULT_PAPERS_PER_TOPIC = 50
 DEFAULT_MIN_CANDIDATES_PER_TOPIC = 120
 DEFAULT_MAX_WORKERS = 8
 DEFAULT_LOOKBACK_YEARS = 3
 DEFAULT_BOOTSTRAP_LIMIT = 8
+SCHEMA_VERSION = "2.0"
 SOURCE_PRIORITY = {"venue": 2, "arxiv": 1}
 CACHE_MODE_OFF = "off"
 CACHE_MODE_READ_WRITE = "read-write"
 CACHE_MODE_READ_ONLY = "read-only"
+CACHE_KEY_NAMESPACE = "research-papers-v2-total-first"
+SELECTION_STATUS_OK = "ok"
+SELECTION_STATUS_BLOCKED = "blocked_insufficient_candidates"
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PAPERS_COOL_SCRIPT = REPO_ROOT / "skills" / "papers-cool-venue-reader" / "scripts" / "papers_cool.py"
 
@@ -134,7 +139,7 @@ def configure_cache(cache_dir: str | None, mode: str, delete_after_run: bool) ->
 
 
 def cache_key(args: list[str]) -> str:
-    return hashlib.sha1(json.dumps(args, ensure_ascii=False).encode("utf-8")).hexdigest()
+    return hashlib.sha1(json.dumps([CACHE_KEY_NAMESPACE, *args], ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def cache_path_for(args: list[str]) -> Path | None:
@@ -695,24 +700,60 @@ def append_unique_until(selected: list[dict[str, Any]], used_keys: set[str], can
 def select_topic_candidates(
     venue_candidates: list[dict[str, Any]],
     arxiv_candidates: list[dict[str, Any]],
-    papers_per_topic: int,
+    target_count: int,
 ) -> list[dict[str, Any]]:
+    if target_count <= 0:
+        return []
+
     venue_ranked = sorted(dedupe_candidates(venue_candidates), key=candidate_sort_key, reverse=True)
     arxiv_ranked = sorted(dedupe_candidates(arxiv_candidates), key=candidate_sort_key, reverse=True)
     combined_ranked = sorted(dedupe_candidates(venue_candidates + arxiv_candidates), key=candidate_sort_key, reverse=True)
 
-    venue_target = min(len(venue_ranked), max(papers_per_topic // 2, round(papers_per_topic * 0.6)))
-    arxiv_target = min(len(arxiv_ranked), papers_per_topic - venue_target)
+    venue_target = min(len(venue_ranked), max(target_count // 2, round(target_count * 0.6)))
+    arxiv_target = min(len(arxiv_ranked), max(0, target_count - venue_target))
 
     selected: list[dict[str, Any]] = []
     used_keys: set[str] = set()
     append_unique_until(selected, used_keys, venue_ranked, venue_target)
     append_unique_until(selected, used_keys, arxiv_ranked, len(selected) + arxiv_target)
-    append_unique_until(selected, used_keys, combined_ranked, papers_per_topic)
-
-    if len(selected) < papers_per_topic:
-        raise RuntimeError(f"去重后仅能保留 {len(selected)} 篇论文，低于每个 topic 至少 {papers_per_topic} 篇的约束。")
+    append_unique_until(selected, used_keys, combined_ranked, target_count)
     return selected
+
+
+def derive_topic_targets(
+    candidate_pool_sizes: list[int],
+    min_total_papers: int,
+    per_topic_floor: int | None,
+) -> tuple[list[int], list[int]]:
+    if not candidate_pool_sizes:
+        return [], []
+
+    topic_count = len(candidate_pool_sizes)
+    base_floor = max(per_topic_floor or 0, min_total_papers // topic_count)
+    base_targets = [base_floor for _ in candidate_pool_sizes]
+    targets = [min(size, base_floor) for size in candidate_pool_sizes]
+    desired_total = max(min_total_papers, sum(base_targets))
+    ranked_indices = sorted(
+        range(topic_count),
+        key=lambda index: (candidate_pool_sizes[index], -index),
+        reverse=True,
+    )
+
+    remaining = max(0, desired_total - sum(targets))
+    while remaining > 0:
+        progressed = False
+        for index in ranked_indices:
+            if remaining <= 0:
+                break
+            if targets[index] >= candidate_pool_sizes[index]:
+                continue
+            targets[index] += 1
+            remaining -= 1
+            progressed = True
+        if not progressed:
+            break
+
+    return targets, base_targets
 
 
 def clean_venue_name(name: str) -> str:
@@ -892,7 +933,13 @@ def summarize_venue_paper(data: dict[str, Any], subtopic: SubtopicSpec, topic_ke
     concepts = extract_paper_concepts(text, keywords, topic_keywords)
     role = infer_paper_role(text)
     analysis = build_analysis(subtopic.name, text, concepts, role)
+    paper_id = compact(data.get("slug") or data.get("paper_id") or title)
+    access_url = data.get("official_url") or data.get("papers_cool_url", "")
+    pdf_url = data.get("pdf_url") or data.get("official_pdf_url") or data.get("pdf") or ""
+    evidence_status = "abstract_only" if compact(summary) else "metadata_only"
+    evidence_note = "基于 papers.cool 提供的题目、摘要和元数据自动整理，未直接核验 PDF 正文。"
     return {
+        "paper_id": paper_id,
         "title": title,
         "authors": normalize_author_list(data.get("authors", [])),
         "venue": clean_venue_name(data.get("venue", "")),
@@ -903,12 +950,17 @@ def summarize_venue_paper(data: dict[str, Any], subtopic: SubtopicSpec, topic_ke
         "table_summary": build_table_summary(concepts, role),
         "insight": build_importance_note(subtopic.name, concepts, role),
         "example": build_example(subtopic.name, concepts, role),
-        "url": data.get("official_url") or data.get("papers_cool_url", ""),
+        "paper_url": access_url,
+        "access_url": access_url,
+        "pdf_url": pdf_url,
+        "url": access_url,
         "source": "venue",
         "role": role,
         "keywords": concepts,
         "diagram": build_mermaid(subtopic.name, concepts, role),
         "evidence_basis": "papers.cool metadata + abstract",
+        "evidence_status": evidence_status,
+        "evidence_note": evidence_note,
     }
 
 
@@ -926,7 +978,12 @@ def summarize_arxiv_paper(item: dict[str, Any], subtopic: SubtopicSpec, topic_ke
     authors = normalize_author_list(head.get("authors", []))
     publish_at = head.get("publish_at", item.get("publish_at", ""))
     analysis = build_analysis(subtopic.name, text, concepts, role)
+    access_url = f"https://arxiv.org/abs/{arxiv_id}"
+    pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf" if compact(arxiv_id) else ""
+    evidence_status = "abstract_only" if compact(abstract) or compact(tldr) or compact(section_tldrs) else "metadata_only"
+    evidence_note = "基于 deepxiv head、摘要和 section TLDR 自动整理，未直接通读 PDF 正文。"
     return {
+        "paper_id": compact(arxiv_id or title),
         "title": title,
         "authors": authors,
         "venue": "arXiv",
@@ -937,12 +994,17 @@ def summarize_arxiv_paper(item: dict[str, Any], subtopic: SubtopicSpec, topic_ke
         "table_summary": build_table_summary(concepts, role),
         "insight": build_importance_note(subtopic.name, concepts, role),
         "example": build_example(subtopic.name, concepts, role),
-        "url": f"https://arxiv.org/abs/{arxiv_id}",
+        "paper_url": access_url,
+        "access_url": access_url,
+        "pdf_url": pdf_url,
+        "url": access_url,
         "source": "arxiv",
         "role": role,
         "keywords": concepts,
         "diagram": build_mermaid(subtopic.name, concepts, role),
         "evidence_basis": "deepxiv head + abstract + section TLDRs",
+        "evidence_status": evidence_status,
+        "evidence_note": evidence_note,
     }
 
 
@@ -1048,13 +1110,82 @@ def build_overall_summary(main_topic: str, subtopics: list[dict[str, Any]]) -> d
     }
 
 
+def published_sort_key(paper: dict[str, Any]) -> tuple[int, int, str]:
+    published = compact(paper.get("published", ""))
+    match = re.search(r"(20\d{2})(?:-(\d{2}))?", published)
+    if match:
+        year = int(match.group(1))
+        month = int(match.group(2) or 0)
+    else:
+        year = int(str(paper.get("year", "0")) or 0)
+        month = 0
+    return year, month, normalize_text(paper.get("title", ""))
+
+
+def relation_label_for_paper(paper: dict[str, Any], index: int) -> str:
+    role = compact(paper.get("role", ""))
+    if index == 0:
+        return "opens"
+    if "基准" in role:
+        return "benchmarks"
+    if "系统" in role or "架构" in role:
+        return "scales"
+    if "综述" in role or "理论" in role:
+        return "synthesizes"
+    return "extends"
+
+
+def build_ending(subtopics: list[dict[str, Any]], overall_summary: dict[str, Any]) -> dict[str, Any]:
+    important_papers: list[str] = []
+    topic_timelines: list[dict[str, Any]] = []
+
+    for subtopic in subtopics:
+        papers = subtopic.get("papers", [])
+        if papers:
+            representative = papers[0]
+            paper_ref = representative.get("paper_id")
+            if paper_ref and paper_ref not in important_papers:
+                important_papers.append(paper_ref)
+
+        ordered_representatives = sorted(papers[:5], key=published_sort_key)
+        topic_timelines.append(
+            {
+                "topic_name": subtopic.get("name", ""),
+                "representative_papers": [
+                    {
+                        "paper_ref": paper.get("paper_id"),
+                        "published": paper.get("published", ""),
+                        "title": paper.get("title", ""),
+                        "why_representative": compact(paper.get("insight") or paper.get("table_summary") or ""),
+                        "relation_label": relation_label_for_paper(paper, index),
+                    }
+                    for index, paper in enumerate(ordered_representatives)
+                    if paper.get("paper_id")
+                ],
+            }
+        )
+
+    reading_recommendations = [
+        compact(item)
+        for item in overall_summary.get("reading_path", [])
+        if compact(item)
+    ]
+    return {
+        "synthesis": overall_summary.get("overview", ""),
+        "important_papers": important_papers[:10],
+        "topic_timelines": topic_timelines,
+        "reading_recommendations": reading_recommendations,
+    }
+
+
 def build_survey(
     topic: str,
     venue_years: list[int],
     venues: list[str],
     arxiv_date_from: str,
     arxiv_limit: int,
-    papers_per_topic: int,
+    min_total_papers: int,
+    per_topic_floor: int | None,
     min_candidates_per_topic: int,
     max_workers: int,
     aliases_override: list[str] | None = None,
@@ -1063,6 +1194,7 @@ def build_survey(
 ) -> dict[str, Any]:
     plan = parse_topic(topic, aliases_override, subtopics_override, keywords_override)
     result = {
+        "schema_version": SCHEMA_VERSION,
         "main_topic": plan.main_topic,
         "parsed_subtopics": [subtopic.name for subtopic in plan.subtopics],
         "keywords": plan.keywords,
@@ -1075,15 +1207,25 @@ def build_survey(
             "venue_years": venue_years,
             "arxiv_date_from": arxiv_date_from,
             "arxiv_limit": arxiv_limit,
-            "papers_per_topic": papers_per_topic,
-            "min_candidates_per_topic": min_candidates_per_topic,
             "max_workers": max_workers,
-            "diagram_policy": "per-paper",
-            "current_year": current_year(),
+        },
+        "selection_contract": {
+            "min_total_papers": min_total_papers,
+            "per_topic_floor": per_topic_floor,
+            "allocation_strategy": "derived_topic_floor",
+            "rebalance_strategy": "density_then_diversity",
+        },
+        "selection_status": SELECTION_STATUS_OK,
+        "requirement_failures": [],
+        "totals": {
+            "candidate_pool_size": 0,
+            "curated_papers": 0,
+            "topic_count": len(plan.subtopics),
         },
         "subtopics": [],
     }
 
+    topic_rows: list[dict[str, Any]] = []
     for subtopic in plan.subtopics:
         venue_candidates, venue_stats = fetch_venue_candidates(
             plan,
@@ -1102,13 +1244,33 @@ def build_survey(
         )
 
         combined_candidates = dedupe_candidates(venue_candidates + arxiv_candidates)
-        if len(combined_candidates) < min_candidates_per_topic:
-            raise RuntimeError(
-                f"topic “{subtopic.name}” 去重后仅得到 {len(combined_candidates)} 篇候选，"
-                f"低于至少 {min_candidates_per_topic} 篇候选的硬约束。"
-            )
+        topic_rows.append(
+            {
+                "subtopic": subtopic,
+                "venue_candidates": venue_candidates,
+                "arxiv_candidates": arxiv_candidates,
+                "combined_candidates": combined_candidates,
+                "venue_stats": venue_stats,
+                "arxiv_stats": arxiv_stats,
+                "candidate_pool_size": len(combined_candidates),
+                "meets_min_candidates": len(combined_candidates) >= min_candidates_per_topic,
+            }
+        )
 
-        selected_candidates = select_topic_candidates(venue_candidates, arxiv_candidates, papers_per_topic)
+    candidate_pool_sizes = [row["candidate_pool_size"] for row in topic_rows]
+    target_allocations, base_allocations = derive_topic_targets(
+        candidate_pool_sizes,
+        min_total_papers,
+        per_topic_floor,
+    )
+
+    for row, target_count, base_target in zip(topic_rows, target_allocations, base_allocations):
+        subtopic = row["subtopic"]
+        selected_candidates = select_topic_candidates(
+            row["venue_candidates"],
+            row["arxiv_candidates"],
+            target_count,
+        )
         papers = summarize_candidates(selected_candidates, subtopic, plan.keywords, max_workers)
         venue_papers = [paper for paper in papers if paper.get("source") == "venue"]
         arxiv_papers = [paper for paper in papers if paper.get("source") == "arxiv"]
@@ -1117,26 +1279,50 @@ def build_survey(
             {
                 "name": subtopic.name,
                 "topic_overview": build_topic_overview(subtopic, papers),
-                "intro": build_topic_intro(subtopic, venue_stats, arxiv_stats, len(combined_candidates), papers),
+                "intro": build_topic_intro(subtopic, row["venue_stats"], row["arxiv_stats"], row["candidate_pool_size"], papers),
                 "papers": papers,
                 "venue_papers": venue_papers,
                 "arxiv_papers": arxiv_papers,
                 "summary": build_topic_summary(subtopic, papers),
+                "allocation": {
+                    "target": target_count,
+                    "selected": len(papers),
+                    "rebalance_delta": target_count - base_target,
+                },
                 "search_stats": {
-                    "venue": venue_stats,
-                    "arxiv": arxiv_stats,
-                    "candidate_pool_size": len(combined_candidates),
+                    "venue": row["venue_stats"],
+                    "arxiv": row["arxiv_stats"],
+                    "candidate_pool_size": row["candidate_pool_size"],
                     "saved_papers": len(papers),
+                    "meets_min_candidates": row["meets_min_candidates"],
                 },
             }
         )
 
-    result["overall_summary"] = build_overall_summary(plan.main_topic, result["subtopics"])
+    overall_summary = build_overall_summary(plan.main_topic, result["subtopics"])
+    result["overall_summary"] = overall_summary
+    result["ending"] = build_ending(result["subtopics"], overall_summary)
+
+    global_candidates = dedupe_candidates(
+        [candidate for row in topic_rows for candidate in row["combined_candidates"]]
+    )
+    curated_total = sum(len(subtopic.get("papers", [])) for subtopic in result["subtopics"])
+    result["totals"] = {
+        "candidate_pool_size": len(global_candidates),
+        "curated_papers": curated_total,
+        "topic_count": len(result["subtopics"]),
+    }
+
+    if curated_total < min_total_papers:
+        result["selection_status"] = SELECTION_STATUS_BLOCKED
+        result["requirement_failures"].append(
+            f"最低总保留论文数 {min_total_papers} 未满足，当前仅 {curated_total} 篇。"
+        )
     return result
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Auto survey papers with runtime topic analysis, venue scan, arXiv enrichment, and markdown rendering.")
+    parser = argparse.ArgumentParser(description="Auto survey papers with runtime topic analysis, global-total-first selection, arXiv enrichment, and markdown rendering.")
     parser.add_argument("topic", help="研究主题，例如：具身空间智能")
     parser.add_argument("-o", "--output", help="输出 markdown 文件路径")
     parser.add_argument("--json-output", help="输出中间 JSON 文件路径")
@@ -1148,8 +1334,9 @@ def main() -> int:
     parser.add_argument("--venues", default="CVPR,ICCV,ECCV,ICML,ICLR,NeurIPS", help="默认检索的六大会，逗号分隔")
     parser.add_argument("--arxiv-date-from", help="ArXiv 起始日期；默认会按当前年份自动回溯")
     parser.add_argument("--arxiv-limit", type=int, default=DEFAULT_ARXIV_LIMIT)
-    parser.add_argument("--per-topic-papers", type=int, default=DEFAULT_PAPERS_PER_TOPIC, help="每个子方向至少保留多少篇论文")
-    parser.add_argument("--min-candidates", type=int, default=DEFAULT_MIN_CANDIDATES_PER_TOPIC, help="每个子方向候选池至少需要多少篇去重论文")
+    parser.add_argument("--min-total-papers", type=int, default=DEFAULT_MIN_TOTAL_PAPERS, help="最终至少保留多少篇论文（默认 200）")
+    parser.add_argument("--per-topic-papers", type=int, help="兼容选项：每个 topic 的初始 floor；最终仍以 --min-total-papers 为主")
+    parser.add_argument("--min-candidates", type=int, default=DEFAULT_MIN_CANDIDATES_PER_TOPIC, help="兼容提示：每个 topic 的候选池参考下限，用于记录而非硬失败")
     parser.add_argument("--max-workers", type=int, default=DEFAULT_MAX_WORKERS, help="并发抓取和解析时使用的线程数")
     parser.add_argument("--cache-dir", help="命令级 JSON 缓存目录；可先在可联网环境预热，再在受限环境复用")
     parser.add_argument(
@@ -1173,10 +1360,12 @@ def main() -> int:
         )
         venues = [compact(value) for value in args.venues.split(",") if compact(value)]
         arxiv_date_from = args.arxiv_date_from or default_arxiv_date_from(args.lookback_years)
-        papers_per_topic = max(1, args.per_topic_papers)
+        min_total_papers = max(1, args.min_total_papers)
+        per_topic_floor = max(1, args.per_topic_papers) if args.per_topic_papers else None
         if args.per_source:
-            papers_per_topic = max(papers_per_topic, args.per_source * 2)
-        min_candidates = max(papers_per_topic * 2, args.min_candidates)
+            derived_floor = max(1, args.per_source * 2)
+            per_topic_floor = max(per_topic_floor or 0, derived_floor)
+        min_candidates = max(1, args.min_candidates)
         max_workers = max(1, args.max_workers)
 
         survey = build_survey(
@@ -1185,13 +1374,15 @@ def main() -> int:
             venues,
             arxiv_date_from,
             args.arxiv_limit,
-            papers_per_topic,
+            min_total_papers,
+            per_topic_floor,
             min_candidates,
             max_workers,
             split_cli_csv(args.aliases),
             split_cli_csv(args.subtopics),
             split_cli_csv(args.keywords),
         )
+        exit_code = 2 if survey.get("selection_status") == SELECTION_STATUS_BLOCKED else 0
 
         if args.prefetch_only:
             cache_dir = str(CACHE_CONFIG.cache_dir) if CACHE_CONFIG.cache_dir else "(disabled)"
@@ -1199,6 +1390,8 @@ def main() -> int:
                 json.dumps(
                     {
                         "status": "prefetch_complete",
+                        "selection_status": survey.get("selection_status"),
+                        "curated_papers": survey.get("totals", {}).get("curated_papers", 0),
                         "cache_dir": cache_dir,
                         "cache_mode": CACHE_CONFIG.mode,
                         "topic": args.topic,
@@ -1208,7 +1401,7 @@ def main() -> int:
                     indent=2,
                 )
             )
-            return 0
+            return exit_code
 
         if args.json_output:
             Path(args.json_output).write_text(json.dumps(survey, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1227,7 +1420,7 @@ def main() -> int:
     finally:
         if CACHE_CONFIG.delete_after_run and CACHE_CONFIG.cache_dir and CACHE_CONFIG.cache_dir.exists():
             shutil.rmtree(CACHE_CONFIG.cache_dir)
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
