@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Prefetch research-papers cache in a networked environment.")
+    parser = argparse.ArgumentParser(description="Prefetch research-papers cache in a networked environment with total-first selection defaults.")
     parser.add_argument("topic", help="研究主题，例如：具身空间智能")
     parser.add_argument("--cache-dir", required=True, help="预热缓存目录")
     parser.add_argument("--aliases", help="逗号分隔的主题别名、英文标准表述或缩写")
@@ -17,7 +17,8 @@ def main() -> int:
     parser.add_argument("--venues", default="CVPR,ICCV,ECCV,ICML,ICLR,NeurIPS")
     parser.add_argument("--arxiv-date-from", help="ArXiv 起始日期")
     parser.add_argument("--arxiv-limit", type=int, default=200)
-    parser.add_argument("--per-topic-papers", type=int, default=50)
+    parser.add_argument("--min-total-papers", type=int, default=200)
+    parser.add_argument("--per-topic-papers", type=int, help="兼容选项：每个 topic 的初始 floor；最终仍以 --min-total-papers 为主")
     parser.add_argument("--min-candidates", type=int, default=120)
     parser.add_argument("--max-workers", type=int, default=8)
     args = parser.parse_args()
@@ -38,13 +39,16 @@ def main() -> int:
         args.venues,
         "--arxiv-limit",
         str(args.arxiv_limit),
-        "--per-topic-papers",
-        str(args.per_topic_papers),
+        "--min-total-papers",
+        str(args.min_total_papers),
         "--min-candidates",
         str(args.min_candidates),
         "--max-workers",
         str(args.max_workers),
     ]
+
+    if args.per_topic_papers is not None:
+        cmd.extend(["--per-topic-papers", str(args.per_topic_papers)])
 
     for flag, value in [
         ("--aliases", args.aliases),
